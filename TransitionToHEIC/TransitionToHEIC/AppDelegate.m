@@ -28,5 +28,18 @@
     return YES;
 }
 
+- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
+    return YES;
+}
+
+- (void)windowWillClose:(NSNotification *)notification {
+    // 如果这是应用的最后一个窗口，可以在这里退出应用
+    NSApplication *app = [NSApplication sharedApplication];
+    if (app.windows.count == 0) {
+        [app terminate:nil];
+    }
+}
+
+
 
 @end

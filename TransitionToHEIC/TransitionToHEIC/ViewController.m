@@ -8,25 +8,93 @@
 #import "ViewController.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
-@interface ViewController ()
+
+@protocol NSDragScrollViewDelegate <NSObject>
+
+- (void)dragEndFileUrls:(NSArray *)urls;
+
+@end
+
+@interface NSDragScrollView : NSScrollView<NSDraggingDestination>
+
+@property (nonatomic, weak) id <NSDragScrollViewDelegate> TT_dragDelegate;
+
+@end
+
+@implementation NSDragScrollView
+
+- (instancetype)initWithFrame:(NSRect)frame
+{
+    self = [super initWithFrame:frame];
+    if (self) {
+        [self registerForDraggedTypes:@[NSPasteboardTypeFileURL]];
+    }
+    return self;
+}
+
+
+- (NSDragOperation)draggingEntered:(id <NSDraggingInfo>)sender {
+    if ([sender draggingSourceOperationMask] & NSDragOperationCopy) {
+        // 检查拖放的内容是否是可接受的类型
+        if ([sender.draggingPasteboard.types containsObject:NSPasteboardTypeFileURL]) {
+            return NSDragOperationCopy;
+        }
+    }
+    return NSDragOperationNone;
+}
+
+- (BOOL)prepareForDragOperation:(id <NSDraggingInfo>)sender {
+    return YES;
+}
+
+- (BOOL)performDragOperation:(id <NSDraggingInfo>)sender {
+    NSPasteboard *pasteboard = [sender draggingPasteboard];
+    if ([[pasteboard types] containsObject:NSPasteboardTypeFileURL]) {
+        NSArray *filenames = [pasteboard propertyListForType:NSFilenamesPboardType];
+        // 处理拖放的文件 URL
+        NSMutableArray *array = [NSMutableArray array];
+        for (NSString *filePath in filenames) {
+            NSLog(@"Dragged file URL: %@", [NSURL fileURLWithPath:filePath]);
+            [array addObject:[NSURL fileURLWithPath:filePath]];
+        }
+        if (self.TT_dragDelegate && [self.TT_dragDelegate respondsToSelector:@selector(dragEndFileUrls:)]) {
+            [self.TT_dragDelegate dragEndFileUrls:array];
+        }
+        return YES;
+    }
+    return NO;
+}
+
+@end
+
+
+@interface ViewController () <NSDragScrollViewDelegate>
 
 @property (nonatomic, strong) NSButton *addBtn;
 
 @property (nonatomic, strong) NSButton *startTaskBtn;
 
+@property (nonatomic, strong) NSButton *heicBtn;
+
+@property (nonatomic, strong) NSButton *jpegBtn;
+
+@property (nonatomic, strong) NSButton *jpgBtn;
+
 @property (nonatomic, strong) NSMutableArray *needTransFilePaths;
 @property (nonatomic, strong) NSMutableArray *logcats;
 
 @property (nonatomic, strong) NSTextView *textView;
-@property (nonatomic, strong) NSScrollView *scrollView;
+@property (nonatomic, strong) NSDragScrollView *scrollView;
+
+@property (nonatomic, strong) NSString *formatTarget;
 
 @end
-
 
 @implementation ViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    
     self.needTransFilePaths = [NSMutableArray array];
     self.addBtn = [NSButton buttonWithTitle:@"添加文件" target:self action:@selector(clickAddFile)];
     
@@ -61,9 +129,57 @@
         [self.startTaskBtn.heightAnchor constraintEqualToConstant:30]
     ]];
     
+    self.heicBtn =  [NSButton buttonWithTitle:@"HEIC格式" target:self action:@selector(transfromHeicTarget)];
+    
+    [self.view addSubview:self.heicBtn];
+    
+    [self.heicBtn setTranslatesAutoresizingMaskIntoConstraints:NO];
+    // 添加约束
+    [NSLayoutConstraint activateConstraints:@[
+        // textView 左边距
+        [self.heicBtn.leadingAnchor constraintEqualToAnchor:self.startTaskBtn.trailingAnchor constant:15],
+        // textView 顶部距离
+        [self.heicBtn.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:15],
+//        [self.heicBtn.widthAnchor constraintEqualToConstant:100],
+        // textView 高度固定
+        [self.heicBtn.heightAnchor constraintEqualToConstant:30]
+    ]];
+    
+    self.jpegBtn =  [NSButton buttonWithTitle:@"JPEG格式" target:self action:@selector(transfromJpegTarget)];
+    
+    [self.view addSubview:self.jpegBtn];
+    
+    [self.jpegBtn setTranslatesAutoresizingMaskIntoConstraints:NO];
+    // 添加约束
+    [NSLayoutConstraint activateConstraints:@[
+        // textView 左边距
+        [self.jpegBtn.leadingAnchor constraintEqualToAnchor:self.heicBtn.trailingAnchor constant:15],
+        // textView 顶部距离
+        [self.jpegBtn.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:15],
+//        [self.jpegBtn.widthAnchor constraintEqualToConstant:100],
+        // textView 高度固定
+        [self.jpegBtn.heightAnchor constraintEqualToConstant:30]
+    ]];
     
     
-    self.scrollView = [[NSScrollView alloc] init];
+    self.jpgBtn =  [NSButton buttonWithTitle:@"JPG格式" target:self action:@selector(transfromJpgTarget)];
+    
+    [self.view addSubview:self.jpgBtn];
+    
+    [self.jpgBtn setTranslatesAutoresizingMaskIntoConstraints:NO];
+    // 添加约束
+    [NSLayoutConstraint activateConstraints:@[
+        // textView 左边距
+        [self.jpgBtn.leadingAnchor constraintEqualToAnchor:self.jpegBtn.trailingAnchor constant:15],
+        // textView 顶部距离
+        [self.jpgBtn.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:15],
+//        [self.jpegBtn.widthAnchor constraintEqualToConstant:100],
+        // textView 高度固定
+        [self.jpgBtn.heightAnchor constraintEqualToConstant:30]
+    ]];
+    
+    self.scrollView = [[NSDragScrollView alloc] init];
+    self.scrollView.TT_dragDelegate = self;
     [self.view addSubview:self.scrollView];
     
     
@@ -88,7 +204,7 @@
         // textView 左边距
         [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:15],
         // textView 右边距
-        [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:15],
+        [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-15],
         // textView 顶部距离
         [self.scrollView.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:60],
         // textView 高度固定
@@ -97,48 +213,38 @@
         
     self.logcats = [NSMutableArray array];
     
-    
+    [self transfromHeicTarget];
     // Do any additional setup after loading the view.
+}
+
+- (void)transfromHeicTarget {
+    self.formatTarget = @"heic";
+    
+    [self.heicBtn setTitle:@"HEIC格式(选中)"];
+    [self.jpegBtn setTitle:@"JPEG格式"];
+    [self.jpgBtn setTitle:@"JPG格式"];
+}
+
+- (void)transfromJpegTarget {
+    self.formatTarget = @"jpeg";
+    
+    [self.heicBtn setTitle:@"HEIC格式"];
+    [self.jpegBtn setTitle:@"JPEG格式(选中)"];
+    [self.jpgBtn setTitle:@"JPG格式"];
+}
+
+- (void)transfromJpgTarget {
+    self.formatTarget = @"jpg";
+    
+    [self.heicBtn setTitle:@"HEIC格式"];
+    [self.jpegBtn setTitle:@"JPEG格式"];
+    [self.jpgBtn setTitle:@"JPG格式(选中)"];
 }
 
 - (void)requestOutputFilePathPermission {
     
 }
-
-- (void)test1 {
-    // 定义要执行的命令   sips -s format heic personal_vip_yoga_logo.png -o personal_vip_yoga_logo.heic
-//        NSString *command = [NSString stringWithFormat:@"%@ %@ -o %@",@"sips -s format heic",[path stringByAppendingPathComponent:name],[path stringByAppendingPathComponent:outputName]];
 //
-//        [self appendLog:command];
-    
-    NSString *command = @"sudo touch /Users/suoxiaoxiao/Documents/demo.txt";
-    
-    // 创建 NSTask 实例
-    NSTask *task = [[NSTask alloc] init];
-    [task setLaunchPath:@"/bin/sh"];
-    
-    // 设置命令参数
-    NSArray *arguments = @[@"-c", command];
-    [task setArguments:arguments];
-    
-    // 创建管道以捕获输出
-    NSPipe *pipe = [NSPipe pipe];
-    [task setStandardOutput:pipe];
-    
-    // 启动任务
-    NSError *error = nil;
-    [task launchAndReturnError:&error];
-    
-    // 读取输出
-    NSData *data = [[pipe fileHandleForReading] readDataToEndOfFile];
-    NSString *output = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-    
-    // 显示输出
-    NSLog(@"Command output:\n%@", output);
-    [self appendLog:@"***************************Terminal***************************"];
-    [self appendLog:[NSString stringWithFormat:@"Command output:\n%@",output]];
-    [self appendLog:@"***************************Terminal***************************"];
-}
 
 - (void)single {
     
@@ -224,9 +330,9 @@
         NSString *str = self.needTransFilePaths[i];
         NSString *path = [str stringByDeletingLastPathComponent];
         NSString *name = [str lastPathComponent];
-        NSString *outputName = [[str lastPathComponent] stringByReplacingOccurrencesOfString:[str pathExtension] withString:@"heic"];
+        NSString *outputName = [[str lastPathComponent] stringByReplacingOccurrencesOfString:[str pathExtension] withString:self.formatTarget];
         // 定义要执行的命令   sips -s format heic personal_vip_yoga_logo.png -o personal_vip_yoga_logo.heic
-        NSString *command = [NSString stringWithFormat:@"%@ %@ -o %@",@"sips -s format heic",[path stringByAppendingPathComponent:name],[path stringByAppendingPathComponent:outputName]];
+        NSString *command = [NSString stringWithFormat:@"%@ %@ %@ -o %@",@"sips -s format",self.formatTarget,[path stringByAppendingPathComponent:name],[path stringByAppendingPathComponent:outputName]];
         
 //        [self appendLog:command];
         
@@ -304,6 +410,10 @@
     self.textView.string = [self.logcats componentsJoinedByString:@"\n\n"];
 }
 
+- (void)dragEndFileUrls:(NSArray *)urls {
+    [self copyFileToTempWithUrls:urls];
+}
+
 - (void)clickAddFile {
 
     NSOpenPanel *openPanel = [NSOpenPanel openPanel];
@@ -314,23 +424,37 @@
     
     if ([openPanel runModal] == NSModalResponseOK) {
         NSArray<NSURL *> *urls = [openPanel URLs];
-        for (NSURL *url in urls) {
-//            [self appendLog:url.path];
-            // 写入到沙盒中
-            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-            NSString *documentsDirectory = [paths objectAtIndex:0];
-//            [self appendLog:documentsDirectory];
-            
-            NSString *name = [url.path lastPathComponent];
-            NSData *data = [NSData dataWithContentsOfURL:url];
-            NSString *writePath = [documentsDirectory stringByAppendingPathComponent:name];
-//            [self appendLog:writePath];
-            BOOL ret = [data writeToFile:[documentsDirectory stringByAppendingPathComponent:name] atomically:true];
-            [self appendLog:[NSString stringWithFormat:@"%@%@",name, ret ? @"写入成功" : @"写入失败"]];
-            if (ret) [self.needTransFilePaths addObject:writePath];
-        }
+//        for (NSURL *url in urls) {
+//            // 写入到沙盒中
+//            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+//            NSString *documentsDirectory = [paths objectAtIndex:0];
+//            
+//            NSString *name = [url.path lastPathComponent];
+//            NSData *data = [NSData dataWithContentsOfURL:url];
+//            NSString *writePath = [documentsDirectory stringByAppendingPathComponent:name];
+//            BOOL ret = [data writeToFile:[documentsDirectory stringByAppendingPathComponent:name] atomically:true];
+//            [self appendLog:[NSString stringWithFormat:@"%@%@",name, ret ? @"写入成功" : @"写入失败"]];
+//            if (ret) [self.needTransFilePaths addObject:writePath];
+//        }
+        [self copyFileToTempWithUrls:urls];
     }
     
+}
+
+- (void)copyFileToTempWithUrls:(NSArray <NSURL *>*)urls {
+//    NSArray<NSURL *> *urls = files;
+    for (NSURL *url in urls) {
+        // 写入到沙盒中
+        NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+        NSString *documentsDirectory = [paths objectAtIndex:0];
+        
+        NSString *name = [url.path lastPathComponent];
+        NSData *data = [NSData dataWithContentsOfURL:url];
+        NSString *writePath = [documentsDirectory stringByAppendingPathComponent:name];
+        BOOL ret = [data writeToFile:[documentsDirectory stringByAppendingPathComponent:name] atomically:true];
+        [self appendLog:[NSString stringWithFormat:@"%@%@",name, ret ? @"写入成功" : @"写入失败"]];
+        if (ret) [self.needTransFilePaths addObject:writePath];
+    }
 }
 
 - (void)setRepresentedObject:(id)representedObject {
@@ -341,3 +465,40 @@
 
 
 @end
+
+
+
+//- (void)test1 {
+//    // 定义要执行的命令   sips -s format heic personal_vip_yoga_logo.png -o personal_vip_yoga_logo.heic
+////        NSString *command = [NSString stringWithFormat:@"%@ %@ -o %@",@"sips -s format heic",[path stringByAppendingPathComponent:name],[path stringByAppendingPathComponent:outputName]];
+////
+////        [self appendLog:command];
+//
+//    NSString *command = @"sudo touch /Users/suoxiaoxiao/Documents/demo.txt";
+//
+//    // 创建 NSTask 实例
+//    NSTask *task = [[NSTask alloc] init];
+//    [task setLaunchPath:@"/bin/sh"];
+//
+//    // 设置命令参数
+//    NSArray *arguments = @[@"-c", command];
+//    [task setArguments:arguments];
+//
+//    // 创建管道以捕获输出
+//    NSPipe *pipe = [NSPipe pipe];
+//    [task setStandardOutput:pipe];
+//
+//    // 启动任务
+//    NSError *error = nil;
+//    [task launchAndReturnError:&error];
+//
+//    // 读取输出
+//    NSData *data = [[pipe fileHandleForReading] readDataToEndOfFile];
+//    NSString *output = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+//
+//    // 显示输出
+//    NSLog(@"Command output:\n%@", output);
+//    [self appendLog:@"***************************Terminal***************************"];
+//    [self appendLog:[NSString stringWithFormat:@"Command output:\n%@",output]];
+//    [self appendLog:@"***************************Terminal***************************"];
+//}
