@@ -352,18 +352,21 @@
         NSError *error = nil;
         [task launchAndReturnError:&error];
         
-        // 读取输出
-        NSData *data = [[pipe fileHandleForReading] readDataToEndOfFile];
-        NSString *output = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        [task waitUntilExit];
         
-        // 显示输出
-//        [self appendLog:@"***************************Terminal***************************"];
-//        [self appendLog:[NSString stringWithFormat:@"%@",output]];
-//        [self appendLog:@"***************************Terminal***************************"];
        // 校验文件是否存在
         if ([[NSFileManager defaultManager] fileExistsAtPath:[path stringByAppendingPathComponent:outputName]]) {
-            [self appendLog:[NSString stringWithFormat:@"转化成功%@",name]];
-            [heicResult addObject:[path stringByAppendingPathComponent:outputName]];
+            
+            NSImage *image = [[NSImage alloc] initWithContentsOfFile:[path stringByAppendingPathComponent:outputName]];
+            
+            if (![self verficationImageAlphaWhiteOfData:image]) {
+                
+                [self appendLog:[NSString stringWithFormat:@"转化成功%@",name]];
+                [heicResult addObject:[path stringByAppendingPathComponent:outputName]];
+                
+            } else {
+                [self appendLog:[NSString stringWithFormat:@"转化失败 转化HEIC图片懈怠了白色透明像素:%@",name]];
+            }
         } else {
             [self appendLog:[NSString stringWithFormat:@"转化失败%@",name]];
         }
@@ -404,6 +407,67 @@
     }];
 }
 
+
+CGImageRef getCGImageFromNSImage(NSImage *nsImage) {
+    NSRect rect = NSMakeRect(0, 0, nsImage.size.width, nsImage.size.height);
+    CGImageRef cgImage = [nsImage CGImageForProposedRect:&rect context:nil hints:nil];
+    return cgImage;
+}
+
+/// 获取图片信息和像素
+/// - Parameters:
+-(BOOL)verficationImageAlphaWhiteOfData:(NSImage *)image
+{
+    
+    // 获取CGImageRef
+    CGImageRef cgimage = getCGImageFromNSImage(image);
+//
+    size_t width  = CGImageGetWidth(cgimage);
+    size_t height = CGImageGetHeight(cgimage);
+    size_t bpr = CGImageGetBytesPerRow(cgimage);
+    size_t bpp = CGImageGetBitsPerPixel(cgimage);
+    size_t bpc = CGImageGetBitsPerComponent(cgimage);
+    size_t bytes_per_pixel = bpp / bpc;
+//
+//    // 获取位图数据
+    CGDataProviderRef provider = CGImageGetDataProvider(cgimage);
+    NSData* data = (__bridge NSData *)CGDataProviderCopyData(provider);
+    const uint8_t* bytes = [data bytes];
+
+//    NSLog(@"Pixel Data: %@\n",name);
+    for(size_t row = 0; row < height; row++)
+    {
+        for(size_t col = 0; col < width; col++)
+        {
+            const uint8_t* pixel =
+                &bytes[row * bpr + col * bytes_per_pixel];
+            
+//            printf("(");
+            NSMutableString *mustr = [[NSMutableString alloc] init];
+            for(size_t x = 0; x < bytes_per_pixel; x++)
+            {
+//                printf("%.2d", pixel[x]);
+                [mustr appendFormat:@"%.2d", pixel[x]];
+                if( x < bytes_per_pixel - 1 ) {
+//                    printf(",");
+                    [mustr appendString:@","];
+                }
+            }
+            if ([mustr containsString:@"255,255,255"]) {
+                NSString *alphaLast = [mustr componentsSeparatedByString:@","].lastObject;
+                if ([alphaLast floatValue] > 0 && [alphaLast floatValue] < 255) {
+//                    NSLog(@"%@",mustr);
+                    return true;
+                }
+            }
+//            printf(")");
+//            if( col < width - 1 )
+//                printf(", ");
+        }
+//        printf("\n");
+    }
+    return false;
+}
 
 - (void)appendLog:(NSString *)logcat {
     [self.logcats addObject:logcat ?: @""];
